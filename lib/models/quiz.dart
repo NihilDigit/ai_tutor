@@ -3,7 +3,7 @@ class Quiz {
   final List<String> options;
   final String correctAnswer;
 
-  Quiz({
+  const Quiz({
     required this.question,
     required this.options,
     required this.correctAnswer,

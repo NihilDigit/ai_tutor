@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:chat_framework/components/chat_bubble.dart';
-import 'package:chat_framework/components/message_input.dart';
-import 'package:chat_framework/components/quiz_widget.dart';
-import 'package:chat_framework/models/message.dart';
-import 'package:chat_framework/models/quiz.dart';
+import '../components/chat_bubble.dart';
+import '../components/quiz_widget.dart';
+import '../models/message.dart';
+import '../models/quiz.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({Key? key}) : super(key: key);
@@ -30,58 +29,24 @@ class _ChatScreenState extends State<ChatScreen> {
         content: '我推荐你看看这个视频： https://www.bilibili.com/video/av1353986541',
         sender: 'bot',
         timestamp: DateTime.now()),
-    // 自动发送测验
     Message(
-        content: '测验：GPT-3 是由哪个公司开发的？',
-        sender: 'bot',
-        timestamp: DateTime.now(),
-        quiz: Quiz(
-          question: 'GPT-3 是由哪个公司开发的？',
-          options: ['Google', 'OpenAI', 'Microsoft', 'Facebook'],
-          correctAnswer: 'OpenAI',
-        )),
-  ];
-
-  void _sendMessage(String text) {
-    final newMessage = Message(
-      content: text,
-      sender: 'user',
-      timestamp: DateTime.now(),
-    );
-    setState(() {
-      _messages.add(newMessage);
-    });
-
-    // 如果用户发送了特定内容，自动发送测验
-    if (text.contains('GPT')) {
-      _sendQuiz();
-    }
-  }
-
-  void _sendQuiz() {
-    final quiz = Quiz(
-      question: 'GPT-3 是由哪个公司开发的？',
-      options: ['Google', 'OpenAI', 'Microsoft', 'Facebook'],
-      correctAnswer: 'OpenAI',
-    );
-
-    final quizMessage = Message(
-      content: '测验：${quiz.question}',
+      content: '',
       sender: 'bot',
       timestamp: DateTime.now(),
-      quiz: quiz,
-    );
-
-    setState(() {
-      _messages.add(quizMessage);
-    });
-  }
+      quiz: Quiz(
+        question: 'GPT 是如何处理文本的？',
+        options: ['词嵌入转向量', '直接处理原始文本', '使用正则表达式', '基于规则分析'],
+        correctAnswer: '词嵌入转向量',
+      ),
+    ),
+  ];
 
   void _handleQuizAnswer(String selectedAnswer, Quiz quiz) {
+    print('用户选择的答案: $selectedAnswer'); // 调试信息
     final resultMessage = Message(
       content: selectedAnswer == quiz.correctAnswer
-          ? '回答正确！'
-          : '回答错误，正确答案是 ${quiz.correctAnswer}。',
+          ? '正确！GPT 确实是通过词嵌入(embedding)将文本转换为向量来处理的。'
+          : '不对哦。根据视频内容，GPT 的第一层是将词嵌入(embedding)为向量，这是处理文本的基础。',
       sender: 'bot',
       timestamp: DateTime.now(),
     );
@@ -97,27 +62,21 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         title: const Text('聊天界面'),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              reverse: true,
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[_messages.length - 1 - index];
-                if (message.quiz != null) {
-                  return QuizWidget(
-                    quiz: message.quiz!,
-                    onAnswerSelected: (answer) =>
-                        _handleQuizAnswer(answer, message.quiz!),
-                  );
-                }
-                return ChatBubble(message: message);
-              },
-            ),
-          ),
-          MessageInput(onSend: _sendMessage),
-        ],
+      body: ListView.builder(
+        itemCount: _messages.length,
+        itemBuilder: (context, index) {
+          final message = _messages[index];
+          if (message.quiz != null) {
+            return QuizWidget(
+              quiz: message.quiz!,
+              onAnswerSelected: (answer) =>
+                  _handleQuizAnswer(answer, message.quiz!),
+              showResult: true, // 确保设置为 true
+              config: const QuizConfig(),
+            );
+          }
+          return ChatBubble(message: message);
+        },
       ),
     );
   }
