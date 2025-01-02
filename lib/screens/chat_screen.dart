@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../components/chat_bubble.dart';
 import '../components/quiz_widget.dart';
 import '../models/message.dart';
 import '../models/quiz.dart';
+import '../providers/theme_provider.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({Key? key}) : super(key: key);

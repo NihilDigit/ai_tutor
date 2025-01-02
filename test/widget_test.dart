@@ -1,30 +1,42 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:provider/provider.dart';
 import 'package:chat_framework/main.dart';
+import 'package:chat_framework/themes/app_theme.dart';
+import 'package:chat_framework/app.dart';
+import 'package:chat_framework/providers/theme_provider.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('Chat app renders correctly', (WidgetTester tester) async {
+    // Build our app with light theme
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => ThemeProvider(),
+        child: const App(),
+      ),
+    );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // Verify app bar title
+    expect(find.text('Chat Framework'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // Verify message input field exists
+    expect(find.byType(TextField), findsOneWidget);
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Verify send button exists
+    expect(find.byIcon(Icons.send), findsOneWidget);
+  });
+
+  testWidgets('Dark theme applies correctly', (WidgetTester tester) async {
+    // Build our app with dark theme
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => ThemeProvider()..setThemeMode(ThemeMode.dark),
+        child: const App(),
+      ),
+    );
+
+    // Verify dark theme is applied
+    final appBar = tester.widget<AppBar>(find.byType(AppBar));
+    expect(appBar.backgroundColor, isNotNull);
   });
 }

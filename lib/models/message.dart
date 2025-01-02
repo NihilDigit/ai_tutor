@@ -4,7 +4,7 @@ class Message {
   final String content;
   final String sender;
   final DateTime timestamp;
-  final Quiz? quiz; // 可选的小测验字段
+  final Quiz? quiz;
 
   Message({
     required this.content,
@@ -12,4 +12,13 @@ class Message {
     required this.timestamp,
     this.quiz,
   });
+
+  factory Message.fromJson(Map<String, dynamic> json) {
+    return Message(
+      content: json['content'],
+      sender: json['sender'],
+      timestamp: DateTime.parse(json['timestamp']),
+      quiz: json['quiz'] != null ? Quiz.fromJson(json['quiz']) : null,
+    );
+  }
 }
