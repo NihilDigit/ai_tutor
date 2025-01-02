@@ -3,223 +3,191 @@ import 'package:http/http.dart' as http;
 import '../models/message.dart';
 import '../models/quiz.dart';
 
-class ChatService {
-  static const String _apiVersion = 'v1';
-  static const Duration _timeoutDuration = Duration(seconds: 10);
-  static const int _maxRetries = 3;
-  
-  static String _baseUrl = 'http://127.0.0.1:8000';
-  
-  static String get _apiBaseUrl => '$_baseUrl/api/$_apiVersion';
-  final http.Client _client;
+class ChatApi {
+  static const String _baseUrl = 'http://localhost:8000';
+  final List<Message> _messages = [];
 
-  ChatService({http.Client? client, String? baseUrl})
-      : _client = client ?? http.Client() {
-    if (baseUrl != null) {
-      _baseUrl = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
-    }
-  }
+  /// Get all messages
+  List<Message> getMessages() => _messages;
 
-  static void setBaseUrl(String url) {
-    _baseUrl = url.endsWith('/') ? url : '$url/';
-  }
+  /// Send a new message to server
+  Future<void> sendMessage(String content) async {
+    final newMessage = Message(
+      content: content,
+      sender: 'user',
+      timestamp: DateTime.now(),
+    );
 
-  Future<List<Message>> getMessageHistory() async {
-    print('Fetching message history from $_apiBaseUrl/messages');
-    int attempt = 0;
-    while (attempt < _maxRetries) {
-      try {
-        final response = await _client.get(
-          Uri.parse('$_apiBaseUrl/messages'),
-          headers: {'Accept': 'application/json'},
-        ).timeout(_timeoutDuration);
+    // Add to local storage immediately
+    _messages.add(newMessage);
 
-        print('Response status: ${response.statusCode}');
-        print('Response body: ${response.body}');
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/messages'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(newMessage.toJson()),
+      );
 
-        if (response.statusCode == 200) {
-          final List<dynamic> data = jsonDecode(response.body);
-          return data.map((json) => Message.fromJson(json)).toList();
-        } else if (response.statusCode >= 500) {
-          attempt++;
-          if (attempt < _maxRetries) {
-            await Future.delayed(Duration(seconds: attempt));
-            continue;
-          }
-        }
-        throw ApiException(
-          'Failed to load message history',
-          statusCode: response.statusCode,
-          responseBody: response.body,
-        );
-      } on ApiException {
-        rethrow;
-      } catch (e) {
-        attempt++;
-        if (attempt >= _maxRetries) {
-          throw ApiException('Network error: $e');
-        }
-        await Future.delayed(Duration(seconds: attempt));
+      if (response.statusCode != 200) {
+        throw Exception('Failed to send message');
       }
+    } catch (e) {
+      // Handle network errors
+      addSystemMessage(
+          '发送测验结果失败，详细信息：\n错误类型：${e.runtimeType}\n错误信息：${e.toString()}');
     }
-    throw ApiException('Max retries reached');
   }
 
-  Future<Message> sendMessage(String content, {Quiz? quiz}) async {
-    print('Sending message to $_apiBaseUrl/messages');
-    print('Message content: $content');
-    int attempt = 0;
-    while (attempt < _maxRetries) {
-      try {
-        final messageData = {
-          'content': content,
-          if (quiz != null) 'quiz': quiz.toJson(),
-        };
+  /// Handle quiz answer and generate response
+  Future<void> handleQuizAnswer(String selectedAnswer, Quiz quiz) async {
+    final resultMessage = Message(
+      content: selectedAnswer == quiz.correctAnswer
+          ? '正确！GPT 确实是通过词嵌入(embedding)将文本转换为向量来处理的。'
+          : '不对哦。根据视频内容，GPT 的第一层是将词嵌入(embedding)为向量，这是处理文本的基础。',
+      sender: 'bot',
+      timestamp: DateTime.now(),
+    );
 
-        final response = await _client.post(
-          Uri.parse('$_apiBaseUrl/messages'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: jsonEncode(messageData),
-        ).timeout(_timeoutDuration);
+    _messages.add(resultMessage);
 
-        print('Response status: ${response.statusCode}');
-        print('Response body: ${response.body}');
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/quiz'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'selectedAnswer': selectedAnswer,
+          'quiz': quiz.toJson(),
+        }),
+      );
 
-        if (response.statusCode == 201) {
-          return Message.fromJson(jsonDecode(response.body));
-        } else if (response.statusCode >= 500) {
-          attempt++;
-          if (attempt < _maxRetries) {
-            await Future.delayed(Duration(seconds: attempt));
-            continue;
-          }
-        }
-        throw ApiException(
-          'Failed to send message',
-          statusCode: response.statusCode,
-          responseBody: response.body,
-        );
-      } on ApiException {
-        rethrow;
-      } catch (e) {
-        attempt++;
-        if (attempt >= _maxRetries) {
-          throw ApiException('Network error: $e');
-        }
-        await Future.delayed(Duration(seconds: attempt));
+      if (response.statusCode != 200) {
+        throw Exception('Failed to send quiz result');
       }
+    } catch (e) {
+      // Handle network errors
+      addSystemMessage(
+          '网络连接失败，详细信息：\n错误类型：${e.runtimeType}\n错误信息：${e.toString()}');
     }
-    throw ApiException('Max retries reached');
   }
 
-  Future<Message> sendQuiz(Quiz quiz) async {
-    print('Sending quiz to $_apiBaseUrl/quizzes');
-    int attempt = 0;
-    while (attempt < _maxRetries) {
-      try {
-        final response = await _client.post(
-          Uri.parse('$_apiBaseUrl/quizzes'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: jsonEncode(quiz.toJson()),
-        ).timeout(_timeoutDuration);
+  /// Add a system message
+  void addSystemMessage(String content) {
+    _messages.add(Message(
+      content: content,
+      sender: 'system',
+      timestamp: DateTime.now(),
+    ));
+  }
 
-        print('Response status: ${response.statusCode}');
-        print('Response body: ${response.body}');
+  /// Add a quiz message
+  Future<void> addQuizMessage(Quiz quiz) async {
+    final quizMessage = Message(
+      content: '',
+      sender: 'bot',
+      timestamp: DateTime.now(),
+      quiz: quiz,
+    );
 
-        if (response.statusCode == 201) {
-          return Message.fromJson(jsonDecode(response.body));
-        } else if (response.statusCode >= 500) {
-          attempt++;
-          if (attempt < _maxRetries) {
-            await Future.delayed(Duration(seconds: attempt));
-            continue;
-          }
-        }
-        throw ApiException(
-          'Failed to send quiz',
-          statusCode: response.statusCode,
-          responseBody: response.body,
-        );
-      } on ApiException {
-        rethrow;
-      } catch (e) {
-        attempt++;
-        if (attempt >= _maxRetries) {
-          throw ApiException('Network error: $e');
-        }
-        await Future.delayed(Duration(seconds: attempt));
+    _messages.add(quizMessage);
+
+    try {
+      // First check if server is reachable
+      final pingResponse = await http.get(Uri.parse(_baseUrl));
+      if (pingResponse.statusCode != 200) {
+        throw Exception('无法连接到服务器，请检查服务器是否运行');
       }
-    }
-    throw ApiException('Max retries reached');
-  }
 
-  Future<void> deleteMessage(String messageId) async {
-    print('Deleting message at $_apiBaseUrl/messages/$messageId');
-    int attempt = 0;
-    while (attempt < _maxRetries) {
-      try {
-        final response = await _client.delete(
-          Uri.parse('$_apiBaseUrl/messages/$messageId'),
-          headers: {'Accept': 'application/json'},
-        ).timeout(_timeoutDuration);
+      // Send quiz as part of message
+      final message = Message(
+        content: '',
+        sender: 'bot',
+        timestamp: DateTime.now(),
+        quiz: quiz,
+      );
 
-        print('Response status: ${response.statusCode}');
-        print('Response body: ${response.body}');
+      // Try sending message with retry logic
+      int retries = 3;
+      while (retries > 0) {
+        try {
+          final response = await http.post(
+            Uri.parse('$_baseUrl/messages'),
+            headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'content': message.content,
+            'sender': message.sender,
+            'timestamp': message.timestamp.toIso8601String(),
+            'quiz': message.quiz?.toJson(),
+          }),
+          );
 
-        if (response.statusCode == 204) {
-          return;
-        } else if (response.statusCode >= 500) {
-          attempt++;
-          if (attempt < _maxRetries) {
-            await Future.delayed(Duration(seconds: attempt));
-            continue;
+          if (response.statusCode == 200) {
+            return;
+          } else if (response.statusCode == 404) {
+            throw Exception('服务器未找到/messages接口，请检查后端配置');
+          } else {
+            throw Exception('服务器返回错误状态码：${response.statusCode}');
           }
+        } catch (e) {
+          retries--;
+          if (retries == 0) {
+            rethrow;
+          }
+          await Future.delayed(Duration(seconds: 1));
         }
-        throw ApiException(
-          'Failed to delete message',
-          statusCode: response.statusCode,
-          responseBody: response.body,
-        );
-      } on ApiException {
-        rethrow;
-      } catch (e) {
-        attempt++;
-        if (attempt >= _maxRetries) {
-          throw ApiException('Network error: $e');
-        }
-        await Future.delayed(Duration(seconds: attempt));
       }
+    } on http.ClientException catch (e) {
+      addSystemMessage('网络连接失败，请检查网络设置\n错误信息：${e.message}');
+    } on FormatException catch (e) {
+      addSystemMessage('数据格式错误，请检查数据\n错误信息：${e.message}');
+    } catch (e) {
+      addSystemMessage('发送测验失败\n错误信息：${e.toString()}');
     }
-    throw ApiException('Max retries reached');
   }
 
-  Future<void> close() async {
-    _client.close();
-  }
-}
+  /// Fetch messages from server
+  Future<void> fetchMessages() async {
+    try {
+      final response = await http.get(Uri.parse('$_baseUrl/messages'));
 
-class ApiException implements Exception {
-  final String message;
-  final int? statusCode;
-  final String? responseBody;
-
-  ApiException(this.message, {this.statusCode, this.responseBody});
-
-  @override
-  String toString() {
-    var msg = 'ApiException: $message';
-    if (statusCode != null) {
-      msg += ' (status code: $statusCode)';
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        _messages.clear();
+        _messages.addAll(data.map((json) => Message.fromJson(json)));
+      } else {
+        // Handle different HTTP error codes
+        String errorMessage;
+        switch (response.statusCode) {
+          case 400:
+            errorMessage = '请求参数错误';
+            break;
+          case 401:
+            errorMessage = '未授权访问';
+            break;
+          case 403:
+            errorMessage = '访问被禁止';
+            break;
+          case 404:
+            errorMessage = '服务器地址未找到';
+            break;
+          case 500:
+            errorMessage = '服务器内部错误';
+            break;
+          default:
+            errorMessage = '服务器返回错误状态码：${response.statusCode}';
+        }
+        addSystemMessage(
+            '获取消息失败，详细信息：\n错误码：${response.statusCode}\n错误信息：$errorMessage');
+      }
+    } on http.ClientException catch (e) {
+      // Handle client-side network errors
+      addSystemMessage('网络连接失败，详细信息：\n错误类型：ClientException\n错误信息：${e.message}');
+    } on FormatException catch (e) {
+      // Handle JSON parsing errors
+      addSystemMessage('数据解析失败，详细信息：\n错误类型：FormatException\n错误信息：${e.message}');
+    } catch (e) {
+      // Handle other unexpected errors
+      addSystemMessage(
+          '未知错误，详细信息：\n错误类型：${e.runtimeType}\n错误信息：${e.toString()}');
     }
-    if (responseBody != null) {
-      msg += '\nResponse body: $responseBody';
-    }
-    return msg;
   }
 }

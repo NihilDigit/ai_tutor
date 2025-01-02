@@ -16,59 +16,39 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final List<Message> _messages = [];
-  late ChatService _chatService;
-  bool _isLoading = true;
-  String? _errorMessage;
+  late final ChatApi _chatApi;
 
   @override
   void initState() {
     super.initState();
-    _chatService = ChatService();
+    _chatApi = ChatApi();
     _loadMessages();
   }
 
   Future<void> _loadMessages() async {
-    try {
-      final messages = await _chatService.getMessageHistory();
-      setState(() {
-        _messages.addAll(messages);
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = '加载消息失败: $e';
-        _isLoading = false;
-      });
+    await _chatApi.fetchMessages();
+    if (_chatApi.getMessages().isEmpty) {
+      _chatApi
+        ..addSystemMessage('你好！这是一个示例对话。')
+        ..addSystemMessage('https://www.bilibili.com/video/BV1Nf6dYGEFH')
+        ..addSystemMessage('请观看上面的视频，然后回答以下问题：')
+        ..addQuizMessage(Quiz(
+          question: 'GPT 是如何处理文本的？',
+          options: ['词嵌入转向量', '直接处理原始文本', '使用正则表达式', '基于规则分析'],
+          correctAnswer: '词嵌入转向量',
+        ));
     }
+    setState(() {});
   }
 
-  Future<void> _sendMessage(String content) async {
-    try {
-      final newMessage = await _chatService.sendMessage(content);
-      setState(() {
-        _messages.add(newMessage);
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = '发送消息失败: $e';
-      });
-    }
+  void _sendMessage(String content) {
+    _chatApi.sendMessage(content);
+    setState(() {});
   }
 
   void _handleQuizAnswer(String selectedAnswer, Quiz quiz) {
-    print('用户选择的答案: $selectedAnswer'); // 调试信息
-    final resultMessage = Message(
-      content: selectedAnswer == quiz.correctAnswer
-          ? '正确！GPT 确实是通过词嵌入(embedding)将文本转换为向量来处理的。'
-          : '不对哦。根据视频内容，GPT 的第一层是将词嵌入(embedding)为向量，这是处理文本的基础。',
-      sender: 'bot',
-      timestamp: DateTime.now(),
-    );
-
-    setState(() {
-      _messages.add(resultMessage);
-    });
+    _chatApi.handleQuizAnswer(selectedAnswer, quiz);
+    setState(() {});
   }
 
   @override
@@ -80,26 +60,22 @@ class _ChatScreenState extends State<ChatScreen> {
       body: Column(
         children: [
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _errorMessage != null
-                    ? Center(child: Text(_errorMessage!))
-                    : ListView.builder(
-                        itemCount: _messages.length,
-                        itemBuilder: (context, index) {
-                          final message = _messages[index];
-                          if (message.quiz != null) {
-                            return QuizWidget(
-                              quiz: message.quiz!,
-                              onAnswerSelected: (answer) =>
-                                  _handleQuizAnswer(answer, message.quiz!),
-                              showResult: true,
-                              config: const QuizConfig(),
-                            );
-                          }
-                          return ChatBubble(message: message);
-                        },
-                      ),
+            child: ListView.builder(
+              itemCount: _chatApi.getMessages().length,
+              itemBuilder: (context, index) {
+                final message = _chatApi.getMessages()[index];
+                if (message.quiz != null) {
+                  return QuizWidget(
+                    quiz: message.quiz!,
+                    onAnswerSelected: (answer) =>
+                        _handleQuizAnswer(answer, message.quiz!),
+                    showResult: true,
+                    config: const QuizConfig(),
+                  );
+                }
+                return ChatBubble(message: message);
+              },
+            ),
           ),
           MessageInput(onSend: _sendMessage),
         ],
