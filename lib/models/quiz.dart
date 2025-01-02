@@ -16,4 +16,12 @@ class Quiz {
       correctAnswer: json['correctAnswer'],
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'question': question,
+      'options': options,
+      'correctAnswer': correctAnswer,
+    };
+  }
 }

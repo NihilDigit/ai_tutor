@@ -21,4 +21,13 @@ class Message {
       quiz: json['quiz'] != null ? Quiz.fromJson(json['quiz']) : null,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'content': content,
+      'sender': sender,
+      'timestamp': timestamp.toIso8601String(),
+      'quiz': quiz?.toJson(),
+    };
+  }
 }

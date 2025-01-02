@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../components/chat_bubble.dart';
 import '../components/quiz_widget.dart';
+import '../components/message_input.dart';
 import '../models/message.dart';
 import '../models/quiz.dart';
 import '../providers/theme_provider.dart';
+import '../api/chat_api.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({Key? key}) : super(key: key);
@@ -14,34 +16,45 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final List<Message> _messages = [
-    Message(
-        content: '你好！',
-        sender: 'user',
-        timestamp: DateTime.now().subtract(const Duration(minutes: 5))),
-    Message(
-        content: '你好！有什么可以帮你的？',
-        sender: 'bot',
-        timestamp: DateTime.now().subtract(const Duration(minutes: 3))),
-    Message(
-        content: '我想了解一下 GPT',
-        sender: 'user',
-        timestamp: DateTime.now().subtract(const Duration(minutes: 2))),
-    Message(
-        content: '我推荐你看看这个视频： https://www.bilibili.com/video/av1353986541',
-        sender: 'bot',
-        timestamp: DateTime.now()),
-    Message(
-      content: '',
-      sender: 'bot',
-      timestamp: DateTime.now(),
-      quiz: Quiz(
-        question: 'GPT 是如何处理文本的？',
-        options: ['词嵌入转向量', '直接处理原始文本', '使用正则表达式', '基于规则分析'],
-        correctAnswer: '词嵌入转向量',
-      ),
-    ),
-  ];
+  final List<Message> _messages = [];
+  late ChatService _chatService;
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _chatService = ChatService();
+    _loadMessages();
+  }
+
+  Future<void> _loadMessages() async {
+    try {
+      final messages = await _chatService.getMessageHistory();
+      setState(() {
+        _messages.addAll(messages);
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = '加载消息失败: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _sendMessage(String content) async {
+    try {
+      final newMessage = await _chatService.sendMessage(content);
+      setState(() {
+        _messages.add(newMessage);
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = '发送消息失败: $e';
+      });
+    }
+  }
 
   void _handleQuizAnswer(String selectedAnswer, Quiz quiz) {
     print('用户选择的答案: $selectedAnswer'); // 调试信息
@@ -64,21 +77,32 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         title: const Text('聊天界面'),
       ),
-      body: ListView.builder(
-        itemCount: _messages.length,
-        itemBuilder: (context, index) {
-          final message = _messages[index];
-          if (message.quiz != null) {
-            return QuizWidget(
-              quiz: message.quiz!,
-              onAnswerSelected: (answer) =>
-                  _handleQuizAnswer(answer, message.quiz!),
-              showResult: true, // 确保设置为 true
-              config: const QuizConfig(),
-            );
-          }
-          return ChatBubble(message: message);
-        },
+      body: Column(
+        children: [
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _errorMessage != null
+                    ? Center(child: Text(_errorMessage!))
+                    : ListView.builder(
+                        itemCount: _messages.length,
+                        itemBuilder: (context, index) {
+                          final message = _messages[index];
+                          if (message.quiz != null) {
+                            return QuizWidget(
+                              quiz: message.quiz!,
+                              onAnswerSelected: (answer) =>
+                                  _handleQuizAnswer(answer, message.quiz!),
+                              showResult: true,
+                              config: const QuizConfig(),
+                            );
+                          }
+                          return ChatBubble(message: message);
+                        },
+                      ),
+          ),
+          MessageInput(onSend: _sendMessage),
+        ],
       ),
     );
   }
